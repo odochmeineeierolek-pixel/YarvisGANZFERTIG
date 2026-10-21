@@ -10,3 +10,8 @@
 Programme-Seite: Startmenü scannen, Haken setzen = YAVIS darf starten. Sage z. B. „Yavis, öffne YouTube“.
 Aktivierungsnamen, Stimme, Stil und Stimmung: Einstellungen. „Sei neutral“ schaltet Gefühle aus.
 Daten liegen lokal in `%APPDATA%\YAVIS`.
+
+## Neu
+- Stimmen: 36 Piper-Profile (Basisstimme wird beim ersten Benutzen einmalig geladen). Fallback: Windows-Stimme.
+- ChatGPT-Seite: eingebetteter Browser mit deinem eigenen ChatGPT-Login.
+- Einstellungen → Mikrofon: Gerät, Empfindlichkeit, Pause, Modell, Mikrofon-Test.

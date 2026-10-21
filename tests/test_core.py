@@ -57,3 +57,19 @@ def test_game_scan_and_launch(tmp_path):
     assert "nicht freigegeben" in core.handle_command("starte counter strike", s)
     assert "nicht freigegeben" in core.handle_command("spiele Fortnite", s)
     assert core.handle_command("spiele ein lied", s) is None
+
+def test_greeting_reaction():
+    s = dict(core.DEFAULTS)
+    for g in ("Hallo", "hallo yavis", "Hey Jarvis", "Guten Morgen"):
+        assert "Hallo Master" in core.handle_command(g, s)
+    assert "Hallo Master" in core.clean_master("Hallo Master, was kann ich für dich tun?")
+
+def test_catalog_has_20_plus():
+    assert len(core.add_catalog([])) >= 30
+    assert core.add_catalog([{"name": "Rechner", "path": "x"}])[0]["name"] != "Rechner"
+
+def test_voice_profiles():
+    import voice
+    assert len(voice.PROFILES) >= 30
+    assert len({p["id"] for p in voice.PROFILES}) == len(voice.PROFILES)
+    assert all(p["base"] in voice.BASES for p in voice.PROFILES)

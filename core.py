@@ -8,10 +8,11 @@ SETTINGS_FILE = APP_DIR / "settings.json"
 DB_FILE = APP_DIR / "yavis.db"
 
 DEFAULTS = {
-    "names": ["yavis", "jarvis"], "model": "llama3.2:3b", "host": "http://localhost:11434",
+    "names": ["yavis", "jarvis", "hallo"], "model": "llama3.2:3b", "host": "http://localhost:11434",
     "voice_id": "", "style": "Normal", "mood": "neutral", "speak": True, "music_dir": "",
     "workdir": str(Path.home() / "YAVIS-Arbeitsordner"), "programs": [],
-    "volume": 80, "autopilot": [],
+    "volume": 80, "autopilot": [], "voice_profile": "kerstin_warm", "mic_device": None, "mic_threshold": 0.012,
+    "mic_silence": 0.8, "stt_model": "base", "catalog_added": False, "v2": False,
 }
 WEB = {"youtube": "https://www.youtube.com", "google": "https://www.google.com",
        "spotify": "https://open.spotify.com", "twitch": "https://www.twitch.tv",
@@ -30,6 +31,9 @@ def load_settings():
         s.update(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
     except Exception:
         pass
+    if not s.get("v2"):
+        if "hallo" not in s["names"]: s["names"].append("hallo")
+        s["v2"] = True
     return s
 
 
@@ -114,15 +118,42 @@ def launch(name, s):
     if p:
         if not p.get("allowed"):
             return f"{p['name']} ist nicht freigegeben, Master."
-        if "://" not in p["path"] and not os.path.exists(p["path"]):
+        path = p["path"]
+        if not (p.get("system") or "://" in path or os.path.exists(path)):
             return f"Der Pfad von {p['name']} existiert nicht mehr, Master."
-        os.startfile(p["path"])  # nur Windows; nur freigegebene Einträge (auch steam://-Links)
+        try:
+            os.startfile(path)  # nur Windows; nur freigegebene Einträge
+        except OSError:
+            return f"{p['name']} konnte nicht gestartet werden, Master."
         return f"{p['name']} wird gestartet, Master."
     key = name.strip().lower()
     if key in WEB:
         webbrowser.open(WEB[key])
         return f"Ich öffne {name} im Browser, Master."
     return f"{name} kenne ich nicht oder es ist nicht freigegeben, Master."
+
+
+CATALOG = [("Rechner", "calc.exe"), ("Editor", "notepad.exe"), ("Paint", "mspaint.exe"), ("Explorer", "explorer.exe"),
+    ("Task-Manager", "taskmgr.exe"), ("Systemsteuerung", "control.exe"), ("Snipping-Tool", "snippingtool.exe"), ("WordPad", "write.exe"),
+    ("Zeichentabelle", "charmap.exe"), ("Windows-Einstellungen", "ms-settings:"), ("Bluetooth", "ms-settings:bluetooth"),
+    ("WLAN", "ms-settings:network-wifi"), ("Anzeige", "ms-settings:display"), ("Sound", "ms-settings:sound"),
+    ("Windows Update", "ms-settings:windowsupdate"), ("Kamera", "microsoft.windows.camera:"), ("Fotos", "ms-photos:"),
+    ("Kalender", "outlookcal:"), ("Mail", "outlookmail:"), ("Karten", "bingmaps:"), ("Wecker", "ms-clock:"),
+    ("Microsoft Store", "ms-windows-store:"), ("Windows-Sicherheit", "windowsdefender:"), ("Geräte-Manager", "devmgmt.msc"),
+    ("Datenträgerbereinigung", "cleanmgr.exe"), ("Chrome", "chrome"), ("Firefox", "firefox"), ("Edge", "msedge"),
+    ("Spotify", "spotify:"), ("Discord", "discord:"), ("Steam", "steam:"), ("Xbox", "xbox:")]
+
+
+def add_catalog(existing):
+    have = {_norm(p["name"]) for p in existing}
+    return [{"name": n, "path": p, "allowed": True, "system": True} for n, p in CATALOG if _norm(n) not in have]
+
+
+def ollama_ok(host):
+    try:
+        urllib.request.urlopen(host + "/api/tags", timeout=2).close(); return True
+    except Exception:
+        return False
 
 
 # ---- Spiele-Scan (Steam, Epic)
@@ -254,6 +285,8 @@ def handle_command(text, s):
     """Schnelle lokale Befehle ohne KI. Gibt Antwort oder None zurück."""
     t = text.strip().rstrip(".!?")
     low = t.lower()
+    if re.fullmatch(r"(hallo|hi|hey|moin|servus|guten (morgen|tag|abend))( yavis| jarvis)?", low):
+        return random.choice(["Hallo Master, was kann ich für dich tun?", "Hallo Master, ich höre dir zu.", "Hallo Master, wie kann ich helfen?"])
     if low in ("neutral", "sei neutral"):
         s["mood"] = "neutral"; save_settings(s); return "Ich bin jetzt neutral, Master."
     for m in ("lieb", "traurig", "böse"):
@@ -285,7 +318,7 @@ def ask_ollama(history, s):
     system = ("Du bist YAVIS, ein persönlicher deutscher Sprachassistent. Nenne den Nutzer 'Master' nur zur Begrüßung, niemals mitten im Satz oder am Satzende. "
               "Antworte kurz (1-3 Sätze), natürlich wie ein Mensch. " + MOODS.get(s["mood"], "") +
               (f" Bekannte Infos über den Master: {mem}." if mem else "") + " " + learned_hints())
-    body = json.dumps({"model": s["model"], "stream": False,
+    body = json.dumps({"model": s["model"], "stream": False, "keep_alive": "30m", "options": {"num_predict": 220},
                        "messages": [{"role": "system", "content": system}] + history[-12:]}).encode()
     req = urllib.request.Request(s["host"] + "/api/chat", body, {"Content-Type": "application/json"})
     try:
@@ -298,6 +331,8 @@ def ask_ollama(history, s):
 
 def clean_master(t):
     """'Master' nur zur Begrüßung: entfernt die Anrede aus normalen Antworten."""
+    if re.match(r"^(Hallo|Hi|Hey|Moin|Servus|Guten (Morgen|Tag|Abend))\b[^.!?]*\bMaster\b", t):
+        return t  # Begrüßung darf 'Master' enthalten
     t = re.sub(r",?\s*\bMaster\b(?=\s*[.!?:]|\s*$)", "", t)
     t = re.sub(r"\bMaster,\s*", "", t)
     t = t.strip()
